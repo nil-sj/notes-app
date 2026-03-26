@@ -1,6 +1,16 @@
 const Note = require('../models/Note')
 const Category = require('../models/Category')
 
+const validateNoteInput = async ({ title, category }) => {
+  if (!title) return 'Title is required'
+  if (!category) return 'Category is required'
+
+  const exists = await Category.findById(category)
+  if (!exists) return 'Category not found'
+
+  return null  // null means no error
+}
+
 const getNotes = async (req, res) => {
   try {
     const notes = await Note.find()
@@ -27,12 +37,8 @@ const createNote = async (req, res) => {
   try {
     const { title, content, category } = req.body
 
-    if (!category) {
-      return res.status(400).json({ error: 'Category is required' })
-    }
-
-    const exists = await Category.findById(category)
-    if (!exists) return res.status(400).json({ error: 'Category not found' })
+    const error = await validateNoteInput({ title, category })
+    if (error) return res.status(400).json({ error })
 
     const note = await Note.create({ title, content, category })
     await note.populate('category', 'name color')
@@ -50,21 +56,23 @@ const updateNote = async (req, res) => {
   try {
     const { title, content, category } = req.body
 
-    if (category) {
-      const exists = await Category.findById(category)
-      if (!exists) return res.status(400).json({ error: 'Category not found' })
-    }
+    const error = await validateNoteInput({ title, category })
+    if (error) return res.status(400).json({ error })
 
     const note = await Note.findByIdAndUpdate(
       req.params.id,
-      { title, content, category: category || null },
+      { title, content, category },
       { new: true, runValidators: true }
     ).populate('category', 'name color')
 
     if (!note) return res.status(404).json({ error: 'Note not found' })
     res.json(note)
   } catch (err) {
-    res.status(400).json({ error: err.message })
+    if (err.name === 'ValidationError') {
+      const messages = Object.values(err.errors).map(e => e.message)
+      return res.status(400).json({ error: messages.join(', ') })
+    }
+    res.status(500).json({ error: err.message })
   }
 }
 
