@@ -11,10 +11,13 @@ const noteSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    category: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Category',        // tells Mongoose which model to populate from
+      default: null,
+    },
   },
-  {
-    timestamps: true,   // adds createdAt and updatedAt automatically
-  }
+  { timestamps: true }
 )
 
 module.exports = mongoose.model('Note', noteSchema)

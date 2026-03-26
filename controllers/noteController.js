@@ -1,19 +1,21 @@
 const Note = require('../models/Note')
+const Category = require('../models/Category')
 
-// GET /api/notes
 const getNotes = async (req, res) => {
   try {
-    const notes = await Note.find().sort({ createdAt: -1 })
+    const notes = await Note.find()
+      .populate('category', 'name color')   // only fetch name + color fields
+      .sort({ createdAt: -1 })
     res.json(notes)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 }
 
-// GET /api/notes/:id
 const getNoteById = async (req, res) => {
   try {
     const note = await Note.findById(req.params.id)
+      .populate('category', 'name color')
     if (!note) return res.status(404).json({ error: 'Note not found' })
     res.json(note)
   } catch (err) {
@@ -21,24 +23,39 @@ const getNoteById = async (req, res) => {
   }
 }
 
-// POST /api/notes
 const createNote = async (req, res) => {
   try {
-    const note = await Note.create(req.body)
+    const { title, content, category } = req.body
+
+    // if a category id was sent, verify it actually exists
+    if (category) {
+      const exists = await Category.findById(category)
+      if (!exists) return res.status(400).json({ error: 'Category not found' })
+    }
+
+    const note = await Note.create({ title, content, category: category || null })
+    await note.populate('category', 'name color')
     res.status(201).json(note)
   } catch (err) {
     res.status(400).json({ error: err.message })
   }
 }
 
-// PUT /api/notes/:id
 const updateNote = async (req, res) => {
   try {
+    const { title, content, category } = req.body
+
+    if (category) {
+      const exists = await Category.findById(category)
+      if (!exists) return res.status(400).json({ error: 'Category not found' })
+    }
+
     const note = await Note.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      { title, content, category: category || null },
       { new: true, runValidators: true }
-    )
+    ).populate('category', 'name color')
+
     if (!note) return res.status(404).json({ error: 'Note not found' })
     res.json(note)
   } catch (err) {
@@ -46,7 +63,6 @@ const updateNote = async (req, res) => {
   }
 }
 
-// DELETE /api/notes/:id
 const deleteNote = async (req, res) => {
   try {
     const note = await Note.findByIdAndDelete(req.params.id)
