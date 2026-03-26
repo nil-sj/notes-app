@@ -1,22 +1,18 @@
 const express = require('express')
-const app = express()
-const PORT = 5000
+const mongoose = require('mongoose')
+require('dotenv').config()
 
-// Middleware: lets Express read JSON request bodies
+const app = express()
 app.use(express.json())
 
-// GET route — returns a simple message
-app.get('/api/hello', (req, res) => {
-  res.json({ message: 'Hello from Express!' })
-})
+// Connect to MongoDB
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('MongoDB connected'))
+  .catch((err) => console.error('MongoDB connection error:', err))
 
-// POST route — reads data from the request body and echoes it back
-app.post('/api/echo', (req, res) => {
-  const data = req.body
-  res.json({ received: data })
-})
+// Routes will go here — we'll move these to separate files later
+const noteRoutes = require('./routes/noteRoutes')
+app.use('/api/notes', noteRoutes)
 
-// Start listening
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`)
-})
+const PORT = process.env.PORT || 5000
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`))
