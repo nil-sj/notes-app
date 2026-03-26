@@ -27,17 +27,22 @@ const createNote = async (req, res) => {
   try {
     const { title, content, category } = req.body
 
-    // if a category id was sent, verify it actually exists
-    if (category) {
-      const exists = await Category.findById(category)
-      if (!exists) return res.status(400).json({ error: 'Category not found' })
+    if (!category) {
+      return res.status(400).json({ error: 'Category is required' })
     }
 
-    const note = await Note.create({ title, content, category: category || null })
+    const exists = await Category.findById(category)
+    if (!exists) return res.status(400).json({ error: 'Category not found' })
+
+    const note = await Note.create({ title, content, category })
     await note.populate('category', 'name color')
     res.status(201).json(note)
   } catch (err) {
-    res.status(400).json({ error: err.message })
+    if (err.name === 'ValidationError') {
+      const messages = Object.values(err.errors).map(e => e.message)
+      return res.status(400).json({ error: messages.join(', ') })
+    }
+    res.status(500).json({ error: err.message })
   }
 }
 

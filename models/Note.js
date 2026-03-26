@@ -13,8 +13,8 @@ const noteSchema = new mongoose.Schema(
     },
     category: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Category',        // tells Mongoose which model to populate from
-      default: null,
+      ref: 'Category',
+      required: [true, 'Category is required'],
     },
   },
   { timestamps: true }
