@@ -5,8 +5,6 @@ const Category = require('../models/Category')
 const validateNoteInput = async ({ title, category }) => {
   if (!title) return 'Title is required'
   if (!category) return 'Category is required'
-
-  // guard against malformed ObjectId strings
   if (!mongoose.Types.ObjectId.isValid(category)) return 'Invalid category ID'
 
   const exists = await Category.findById(category)
@@ -15,10 +13,20 @@ const validateNoteInput = async ({ title, category }) => {
   return null
 }
 
+const sanitiseTags = (tags) => {
+  if (!tags) return []
+  if (!Array.isArray(tags)) return []
+  return [...new Set(
+    tags
+      .map(t => t.trim().toLowerCase())
+      .filter(t => t.length > 0)
+  )]
+}
+
 const getNotes = async (req, res) => {
   try {
     const notes = await Note.find()
-      .populate('category', 'name color')   // only fetch name + color fields
+      .populate('category', 'name color')
       .sort({ createdAt: -1 })
     res.json(notes)
   } catch (err) {
@@ -42,12 +50,17 @@ const getNoteById = async (req, res) => {
 
 const createNote = async (req, res) => {
   try {
-    const { title, content, category } = req.body
+    const { title, content, category, tags } = req.body
 
     const error = await validateNoteInput({ title, category })
     if (error) return res.status(400).json({ error })
 
-    const note = await Note.create({ title, content, category })
+    const note = await Note.create({
+      title,
+      content,
+      category,
+      tags: sanitiseTags(tags),
+    })
     await note.populate('category', 'name color')
     res.status(201).json(note)
   } catch (err) {
@@ -61,7 +74,7 @@ const createNote = async (req, res) => {
 
 const updateNote = async (req, res) => {
   try {
-    const { title, content, category } = req.body
+    const { title, content, category, tags } = req.body
 
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ error: 'Invalid note ID' })
@@ -72,7 +85,7 @@ const updateNote = async (req, res) => {
 
     const note = await Note.findByIdAndUpdate(
       req.params.id,
-      { title, content, category },
+      { title, content, category, tags: sanitiseTags(tags) },
       { new: true, runValidators: true }
     ).populate('category', 'name color')
 

@@ -16,6 +16,10 @@ const noteSchema = new mongoose.Schema(
       ref: 'Category',
       required: [true, 'Category is required'],
     },
+    tags: {
+      type: [String],
+      default: [],
+    },
   },
   { timestamps: true }
 )
