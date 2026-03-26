@@ -1,3 +1,4 @@
+const mongoose = require('mongoose')
 const Note = require('../models/Note')
 const Category = require('../models/Category')
 
@@ -5,10 +6,13 @@ const validateNoteInput = async ({ title, category }) => {
   if (!title) return 'Title is required'
   if (!category) return 'Category is required'
 
+  // guard against malformed ObjectId strings
+  if (!mongoose.Types.ObjectId.isValid(category)) return 'Invalid category ID'
+
   const exists = await Category.findById(category)
   if (!exists) return 'Category not found'
 
-  return null  // null means no error
+  return null
 }
 
 const getNotes = async (req, res) => {
@@ -24,6 +28,9 @@ const getNotes = async (req, res) => {
 
 const getNoteById = async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid note ID' })
+    }
     const note = await Note.findById(req.params.id)
       .populate('category', 'name color')
     if (!note) return res.status(404).json({ error: 'Note not found' })
@@ -78,6 +85,9 @@ const updateNote = async (req, res) => {
 
 const deleteNote = async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid note ID' })
+    }
     const note = await Note.findByIdAndDelete(req.params.id)
     if (!note) return res.status(404).json({ error: 'Note not found' })
     res.status(204).end()
