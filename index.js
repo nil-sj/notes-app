@@ -18,5 +18,16 @@ mongoose.connect(process.env.MONGO_URI)
 app.use('/api/notes',      require('./routes/noteRoutes'))
 app.use('/api/categories', require('./routes/categoryRoutes'))
 
+// Custom error handler for Multer file upload errors and other errors
+app.use((err, req, res, next) => {
+  if (err.message && err.message.includes('Images only')) {
+    return res.status(400).json({ error: err.message })
+  }
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({ error: 'File too large — maximum size is 1MB' })
+  }
+  res.status(500).json({ error: err.message })
+})
+
 const PORT = process.env.PORT || 5000
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`))
