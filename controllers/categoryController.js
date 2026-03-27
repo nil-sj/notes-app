@@ -2,12 +2,21 @@ const Category = require('../models/Category')
 
 const getCategories = async (req, res) => {
   try {
-    const categories = await Category.find().sort({ name: 1 })
+    const { name } = req.query
+    const filter = {}
+
+    if (name) {
+      // case-insensitive partial match using a regex
+      filter.name = { $regex: name, $options: 'i' }
+    }
+
+    const categories = await Category.find(filter).sort({ name: 1 })
     res.json(categories)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 }
+
 
 const getCategoryById = async (req, res) => {
   try {

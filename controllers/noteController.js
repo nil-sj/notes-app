@@ -25,14 +25,30 @@ const sanitiseTags = (tags) => {
 
 const getNotes = async (req, res) => {
   try {
-    const notes = await Note.find()
+    const { category, tag } = req.query
+    const filter = {}
+
+    if (category) {
+      if (!mongoose.Types.ObjectId.isValid(category)) {
+        return res.status(400).json({ error: 'Invalid category ID' })
+      }
+      filter.category = category
+    }
+
+    if (tag) {
+      filter.tags = { $in: [tag.trim().toLowerCase()] }
+    }
+
+    const notes = await Note.find(filter)
       .populate('category', 'name color')
       .sort({ createdAt: -1 })
+
     res.json(notes)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 }
+
 
 const getNoteById = async (req, res) => {
   try {
