@@ -4,19 +4,13 @@ const getCategories = async (req, res) => {
   try {
     const { name } = req.query
     const filter = {}
-
-    if (name) {
-      // case-insensitive partial match using a regex
-      filter.name = { $regex: name, $options: 'i' }
-    }
-
+    if (name) filter.name = { $regex: name, $options: 'i' }
     const categories = await Category.find(filter).sort({ name: 1 })
     res.json(categories)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 }
-
 
 const getCategoryById = async (req, res) => {
   try {
@@ -30,10 +24,44 @@ const getCategoryById = async (req, res) => {
 
 const createCategory = async (req, res) => {
   try {
-    const category = await Category.create(req.body)
+    const { name, color } = req.body
+
+    if (!name) return res.status(400).json({ error: 'Name is required' })
+
+    // if a file was uploaded, build the public URL path
+    const iconUrl = req.file
+      ? `/uploads/${req.file.filename}`
+      : null
+
+    const category = await Category.create({ name, color, iconUrl })
     res.status(201).json(category)
   } catch (err) {
-    res.status(400).json({ error: err.message })
+    if (err.code === 11000) {
+      return res.status(400).json({ error: 'Category name already exists' })
+    }
+    res.status(500).json({ error: err.message })
+  }
+}
+
+// dedicated endpoint to upload or replace just the icon
+const updateCategoryIcon = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' })
+    }
+
+    const iconUrl = `/uploads/${req.file.filename}`
+
+    const category = await Category.findByIdAndUpdate(
+      req.params.id,
+      { iconUrl },
+      { new: true }
+    )
+
+    if (!category) return res.status(404).json({ error: 'Category not found' })
+    res.json(category)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
   }
 }
 
@@ -47,4 +75,10 @@ const deleteCategory = async (req, res) => {
   }
 }
 
-module.exports = { getCategories, getCategoryById, createCategory, deleteCategory }
+module.exports = {
+  getCategories,
+  getCategoryById,
+  createCategory,
+  updateCategoryIcon,
+  deleteCategory,
+}

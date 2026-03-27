@@ -12,6 +12,10 @@ const categorySchema = new mongoose.Schema(
       type: String,
       default: '#cccccc',
     },
+    iconUrl: {
+      type: String,
+      default: null,
+    },
   },
   { timestamps: true }
 )

@@ -1,9 +1,13 @@
 const express = require('express')
+const path = require('path')
 const mongoose = require('mongoose')
 require('dotenv').config()
 
 const app = express()
 app.use(express.json())
+
+// after app.use(express.json())
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')))
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGO_URI)
