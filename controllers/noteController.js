@@ -37,6 +37,7 @@ const getNotes = async (req, res) => {
 
     const notes = await Note.find(filter)
       .populate('category', 'name color iconUrl')
+      .populate('createdBy', 'name email')
       .sort({ createdAt: -1 })
 
     res.json(notes)
@@ -52,6 +53,7 @@ const getNoteById = async (req, res) => {
     }
     const note = await Note.findById(req.params.id)
       .populate('category', 'name color iconUrl')
+      .populate('createdBy', 'name email')
     if (!note) return res.status(404).json({ error: 'Note not found' })
     res.json(note)
   } catch (err) {
@@ -74,8 +76,10 @@ const createNote = async (req, res) => {
       category,
       tags: sanitiseTags(tags),
       imageUrl,
+      createdBy: req.user.id,    // ← from protect middleware
     })
     await note.populate('category', 'name color iconUrl')
+    await note.populate('createdBy', 'name email')
     res.status(201).json(note)
   } catch (err) {
     if (err.name === 'ValidationError') {
@@ -88,11 +92,8 @@ const createNote = async (req, res) => {
 
 const updateNote = async (req, res) => {
   try {
+    // req.note already fetched and ownership verified by requireOwnership
     const { title, content, category, tags } = req.body
-
-    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ error: 'Invalid note ID' })
-    }
 
     const error = await validateNoteInput({ title, category })
     if (error) return res.status(400).json({ error })
@@ -101,9 +102,10 @@ const updateNote = async (req, res) => {
       req.params.id,
       { title, content, category, tags: sanitiseTags(tags) },
       { new: true, runValidators: true }
-    ).populate('category', 'name color iconUrl')
+    )
+      .populate('category', 'name color iconUrl')
+      .populate('createdBy', 'name email')
 
-    if (!note) return res.status(404).json({ error: 'Note not found' })
     res.json(note)
   } catch (err) {
     if (err.name === 'ValidationError') {
@@ -114,13 +116,8 @@ const updateNote = async (req, res) => {
   }
 }
 
-// dedicated endpoint to upload or replace just the note image
 const updateNoteImage = async (req, res) => {
   try {
-    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ error: 'Invalid note ID' })
-    }
-
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' })
     }
@@ -131,9 +128,10 @@ const updateNoteImage = async (req, res) => {
       req.params.id,
       { imageUrl },
       { new: true }
-    ).populate('category', 'name color iconUrl')
+    )
+      .populate('category', 'name color iconUrl')
+      .populate('createdBy', 'name email')
 
-    if (!note) return res.status(404).json({ error: 'Note not found' })
     res.json(note)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -142,11 +140,7 @@ const updateNoteImage = async (req, res) => {
 
 const deleteNote = async (req, res) => {
   try {
-    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ error: 'Invalid note ID' })
-    }
-    const note = await Note.findByIdAndDelete(req.params.id)
-    if (!note) return res.status(404).json({ error: 'Note not found' })
+    await Note.findByIdAndDelete(req.params.id)
     res.status(204).end()
   } catch (err) {
     res.status(500).json({ error: err.message })

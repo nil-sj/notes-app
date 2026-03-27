@@ -1,7 +1,8 @@
 const express = require('express')
 const router = express.Router()
 const createUploader = require('../middleware/upload')
-const upload = createUploader('note')   // prefix becomes 'note'
+const upload = createUploader('note')
+const { protect, requireOwnership } = require('../middleware/auth')
 const {
   getNotes,
   getNoteById,
@@ -11,11 +12,16 @@ const {
   deleteNote,
 } = require('../controllers/noteController')
 
-router.get('/',            getNotes)
-router.get('/:id',         getNoteById)
-router.post('/',           upload.single('image'), createNote)
-router.put('/:id',         updateNote)
-router.patch('/:id/image', upload.single('image'), updateNoteImage)
-router.delete('/:id',      deleteNote)
+// public
+router.get('/',    getNotes)
+router.get('/:id', getNoteById)
+
+// auth required
+router.post('/', protect, upload.single('image'), createNote)
+
+// owner only — protect runs first, then requireOwnership, then the handler
+router.put('/:id',         protect, requireOwnership, updateNote)
+router.patch('/:id/image', protect, requireOwnership, upload.single('image'), updateNoteImage)
+router.delete('/:id',      protect, requireOwnership, deleteNote)
 
 module.exports = router
