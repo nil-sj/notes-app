@@ -17,6 +17,7 @@ mongoose.connect(process.env.MONGO_URI)
 // Routes will go here — we'll move these to separate files later
 app.use('/api/notes',      require('./routes/noteRoutes'))
 app.use('/api/categories', require('./routes/categoryRoutes'))
+app.use('/api/auth',       require('./routes/authRoutes'))
 
 // Custom error handler for Multer file upload errors and other errors
 app.use((err, req, res, next) => {
