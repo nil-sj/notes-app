@@ -19,6 +19,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Password is required'],
       minlength: [6, 'Password must be at least 6 characters'],
+      select: false, // exclude password from query results by default
     },
     role: {
       type: String,
@@ -30,10 +31,9 @@ const userSchema = new mongoose.Schema(
 )
 
 // hash password before saving — runs automatically on save()
-userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next()
+userSchema.pre('save', async function () {
+  if (!this.isModified('password')) return
   this.password = await bcrypt.hash(this.password, 12)
-  next()
 })
 
 // instance method to compare passwords
