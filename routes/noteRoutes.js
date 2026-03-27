@@ -2,26 +2,32 @@ const express = require('express')
 const router = express.Router()
 const createUploader = require('../middleware/upload')
 const upload = createUploader('note')
-const { protect, requireOwnership } = require('../middleware/auth')
+const { protect, requireOwnership, requireAdmin } = require('../middleware/auth')
 const {
   getNotes,
   getNoteById,
   createNote,
   updateNote,
   updateNoteImage,
+  publishNote,
+  approveNote,
   deleteNote,
 } = require('../controllers/noteController')
 
-// public
+// public — but getNotes and getNoteById handle visibility internally
 router.get('/',    getNotes)
 router.get('/:id', getNoteById)
 
 // auth required
 router.post('/', protect, upload.single('image'), createNote)
 
-// owner only — protect runs first, then requireOwnership, then the handler
-router.put('/:id',         protect, requireOwnership, updateNote)
-router.patch('/:id/image', protect, requireOwnership, upload.single('image'), updateNoteImage)
-router.delete('/:id',      protect, requireOwnership, deleteNote)
+// owner only
+router.put('/:id',            protect, requireOwnership, updateNote)
+router.patch('/:id/image',    protect, requireOwnership, upload.single('image'), updateNoteImage)
+router.patch('/:id/publish',  protect, requireOwnership, publishNote)
+router.delete('/:id',         protect, requireOwnership, deleteNote)
+
+// admin only
+router.patch('/:id/approve',  protect, requireAdmin, approveNote)
 
 module.exports = router

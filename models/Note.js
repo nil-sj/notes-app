@@ -29,6 +29,11 @@ const noteSchema = new mongoose.Schema(
       ref: 'User',
       required: [true, 'Creator is required'],
     },
+    status: {
+      type: String,
+      enum: ['private', 'pending', 'public'],
+      default: 'private',
+    },
   },
   { timestamps: true }
 )

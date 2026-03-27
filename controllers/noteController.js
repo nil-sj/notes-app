@@ -35,6 +35,29 @@ const getNotes = async (req, res) => {
       filter.tags = { $in: [tag.trim().toLowerCase()] }
     }
 
+    // unauthenticated visitors only see public notes
+    // authenticated users also see their own private and pending notes
+    const authHeader = req.headers.authorization
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const jwt = require('jsonwebtoken')
+        const decoded = jwt.verify(
+          authHeader.split(' ')[1],
+          process.env.JWT_SECRET
+        )
+        // show public notes + this user's own notes of any status
+        filter.$or = [
+          { status: 'public' },
+          { createdBy: decoded.id },
+        ]
+      } catch {
+        // invalid token — treat as unauthenticated
+        filter.status = 'public'
+      }
+    } else {
+      filter.status = 'public'
+    }
+
     const notes = await Note.find(filter)
       .populate('category', 'name color iconUrl')
       .populate('createdBy', 'name email')
@@ -55,6 +78,27 @@ const getNoteById = async (req, res) => {
       .populate('category', 'name color iconUrl')
       .populate('createdBy', 'name email')
     if (!note) return res.status(404).json({ error: 'Note not found' })
+
+    // private and pending notes only visible to their creator
+    const authHeader = req.headers.authorization
+    if (note.status !== 'public') {
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(403).json({ error: 'This note is private' })
+      }
+      try {
+        const jwt = require('jsonwebtoken')
+        const decoded = jwt.verify(
+          authHeader.split(' ')[1],
+          process.env.JWT_SECRET
+        )
+        if (note.createdBy._id.toString() !== decoded.id.toString()) {
+          return res.status(403).json({ error: 'This note is private' })
+        }
+      } catch {
+        return res.status(403).json({ error: 'This note is private' })
+      }
+    }
+
     res.json(note)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -76,7 +120,8 @@ const createNote = async (req, res) => {
       category,
       tags: sanitiseTags(tags),
       imageUrl,
-      createdBy: req.user.id,    // ← from protect middleware
+      createdBy: req.user.id,
+      status: 'private',         // always starts private
     })
     await note.populate('category', 'name color iconUrl')
     await note.populate('createdBy', 'name email')
@@ -92,7 +137,6 @@ const createNote = async (req, res) => {
 
 const updateNote = async (req, res) => {
   try {
-    // req.note already fetched and ownership verified by requireOwnership
     const { title, content, category, tags } = req.body
 
     const error = await validateNoteInput({ title, category })
@@ -121,9 +165,7 @@ const updateNoteImage = async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' })
     }
-
     const imageUrl = `/uploads/${req.file.filename}`
-
     const note = await Note.findByIdAndUpdate(
       req.params.id,
       { imageUrl },
@@ -131,8 +173,59 @@ const updateNoteImage = async (req, res) => {
     )
       .populate('category', 'name color iconUrl')
       .populate('createdBy', 'name email')
-
     res.json(note)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+// creator requests to publish their note
+const publishNote = async (req, res) => {
+  try {
+    // req.note is already fetched by requireOwnership
+    const note = req.note
+
+    if (note.status === 'public') {
+      return res.status(400).json({ error: 'Note is already public' })
+    }
+
+    note.status = 'pending'
+    await note.save()
+
+    res.json({ message: 'Note submitted for admin approval', note })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+// admin approves or rejects a pending note
+const approveNote = async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid note ID' })
+    }
+
+    const { action } = req.body  // action: 'approve' or 'reject'
+
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ error: 'Action must be approve or reject' })
+    }
+
+    const note = await Note.findById(req.params.id)
+    if (!note) return res.status(404).json({ error: 'Note not found' })
+
+    if (note.status !== 'pending') {
+      return res.status(400).json({ error: 'Only pending notes can be reviewed' })
+    }
+
+    note.status = action === 'approve' ? 'public' : 'private'
+    await note.save()
+
+    const message = action === 'approve'
+      ? 'Note approved and is now public'
+      : 'Note rejected and returned to private'
+
+    res.json({ message, note })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -153,5 +246,7 @@ module.exports = {
   createNote,
   updateNote,
   updateNoteImage,
+  publishNote,
+  approveNote,
   deleteNote,
 }
