@@ -21,7 +21,7 @@ const sanitiseTags = (tags) => {
 
 const getNotes = async (req, res) => {
   try {
-    const { category, tag } = req.query
+    const { category, tag, page, limit: limitParam } = req.query
     const filter = {}
 
     if (category) {
@@ -35,8 +35,7 @@ const getNotes = async (req, res) => {
       filter.tags = { $in: [tag.trim().toLowerCase()] }
     }
 
-    // unauthenticated visitors only see public notes
-    // authenticated users also see their own private and pending notes
+    // visibility filter
     const authHeader = req.headers.authorization
     if (authHeader && authHeader.startsWith('Bearer ')) {
       try {
@@ -45,25 +44,44 @@ const getNotes = async (req, res) => {
           authHeader.split(' ')[1],
           process.env.JWT_SECRET
         )
-        // show public notes + this user's own notes of any status
         filter.$or = [
           { status: 'public' },
           { createdBy: decoded.id },
         ]
       } catch {
-        // invalid token — treat as unauthenticated
         filter.status = 'public'
       }
     } else {
       filter.status = 'public'
     }
 
-    const notes = await Note.find(filter)
-      .populate('category', 'name color iconUrl')
-      .populate('createdBy', 'name email')
-      .sort({ createdAt: -1 })
+    // pagination — parse and validate
+    const pageNum  = Math.max(1, parseInt(page)  || 1)
+    const limitNum = Math.min(50, Math.max(1, parseInt(limitParam) || 10))
+    const skip     = (pageNum - 1) * limitNum
 
-    res.json(notes)
+    // run both queries in parallel — faster than sequential awaits
+    const [notes, total] = await Promise.all([
+      Note.find(filter)
+        .populate('category', 'name color iconUrl')
+        .populate('createdBy', 'name email')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum),
+      Note.countDocuments(filter),
+    ])
+
+    res.json({
+      notes,
+      pagination: {
+        total,
+        page:       pageNum,
+        limit:      limitNum,
+        totalPages: Math.ceil(total / limitNum),
+        hasNextPage: pageNum < Math.ceil(total / limitNum),
+        hasPrevPage: pageNum > 1,
+      },
+    })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
