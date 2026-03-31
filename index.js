@@ -39,6 +39,11 @@ app.use(generalLimiter)
 app.use(express.json())
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')))
 
+// connect to MongoDB
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('MongoDB connected'))
+  .catch((err) => console.error('MongoDB connection error:', err))
+
 // apply strict limiter to auth routes only — overrides general limiter
 app.use('/api/auth',       authLimiter, require('./routes/authRoutes'))
 app.use('/api/notes',      require('./routes/noteRoutes'))
@@ -59,22 +64,4 @@ app.use((err, req, res, next) => {
 })
 
 const PORT = process.env.PORT || 5000
-
-async function startServer() {
-  try {
-    await mongoose.connect(process.env.MONGO_URI, {
-      serverSelectionTimeoutMS: 5000,
-    })
-
-    console.log('MongoDB connected')
-
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`)
-    })
-  } catch (err) {
-    console.error('MongoDB connection error:', err)
-    process.exit(1)
-  }
-}
-
-startServer()
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`))
