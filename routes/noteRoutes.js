@@ -6,6 +6,7 @@ const { protect, requireOwnership, requireAdmin } = require('../middleware/auth'
 const {
   getNotes,
   getNoteById,
+  getMyNotes,
   createNote,
   updateNote,
   updateNoteImage,
@@ -14,9 +15,10 @@ const {
   deleteNote,
 } = require('../controllers/noteController')
 
-// public — but getNotes and getNoteById handle visibility internally
-router.get('/',    getNotes)
-router.get('/:id', getNoteById)
+// public
+router.get('/',       getNotes)
+router.get('/mine',   protect, getMyNotes)    // ← must be before /:id
+router.get('/:id',    getNoteById)
 
 // auth required
 router.post('/', protect, upload.single('image'), createNote)

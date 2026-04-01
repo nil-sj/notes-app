@@ -112,6 +112,62 @@ const getNoteById = async (req, res, next) => {
   }
 }
 
+const getMyNotes = async (req, res, next) => {
+  try {
+    const { page, limit: limitParam, status, category, tag } = req.query
+    const filter = { createdBy: req.user.id }  // only this user's notes
+
+    // optional status filter — ?status=private, ?status=pending, ?status=public
+    if (status) {
+      if (!['private', 'pending', 'public'].includes(status)) {
+        throw new AppError('Status must be private, pending or public', 400)
+      }
+      filter.status = status
+    }
+
+    // optional category filter
+    if (category) {
+      if (!mongoose.Types.ObjectId.isValid(category)) {
+        throw new AppError('Invalid category ID', 400)
+      }
+      filter.category = category
+    }
+
+    // optional tag filter
+    if (tag) {
+      filter.tags = { $in: [tag.trim().toLowerCase()] }
+    }
+
+    const pageNum  = Math.max(1, parseInt(page) || 1)
+    const limitNum = Math.min(50, Math.max(1, parseInt(limitParam) || 10))
+    const skip     = (pageNum - 1) * limitNum
+
+    const [notes, total] = await Promise.all([
+      Note.find(filter)
+        .populate('category', 'name color iconUrl')
+        .populate('createdBy', 'name email')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum),
+      Note.countDocuments(filter),
+    ])
+
+    res.json({
+      notes,
+      pagination: {
+        total,
+        page:        pageNum,
+        limit:       limitNum,
+        totalPages:  Math.ceil(total / limitNum),
+        hasNextPage: pageNum < Math.ceil(total / limitNum),
+        hasPrevPage: pageNum > 1,
+      },
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
 const createNote = async (req, res, next) => {
   try {
     const { title, content, category, tags } = req.body
@@ -232,6 +288,7 @@ const deleteNote = async (req, res, next) => {
 module.exports = {
   getNotes,
   getNoteById,
+  getMyNotes,
   createNote,
   updateNote,
   updateNoteImage,
