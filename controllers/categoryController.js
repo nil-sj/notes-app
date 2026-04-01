@@ -1,6 +1,7 @@
 const Category = require('../models/Category')
+const AppError = require('../utils/AppError')
 
-const getCategories = async (req, res) => {
+const getCategories = async (req, res, next) => {
   try {
     const { name } = req.query
     const filter = {}
@@ -8,92 +9,74 @@ const getCategories = async (req, res) => {
     const categories = await Category.find(filter).sort({ name: 1 })
     res.json(categories)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    next(err)
   }
 }
 
-const getCategoryById = async (req, res) => {
+const getCategoryById = async (req, res, next) => {
   try {
     const category = await Category.findById(req.params.id)
-    if (!category) return res.status(404).json({ error: 'Category not found' })
+    if (!category) throw new AppError('Category not found', 404)
     res.json(category)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    next(err)
   }
 }
 
-const createCategory = async (req, res) => {
+const createCategory = async (req, res, next) => {
   try {
     const { name, color } = req.body
+    if (!name) throw new AppError('Name is required', 400)
 
-    if (!name) return res.status(400).json({ error: 'Name is required' })
-
-    // if a file was uploaded, build the public URL path
-    const iconUrl = req.file
-      ? `/uploads/${req.file.filename}`
-      : null
-
+    const iconUrl = req.file ? `/uploads/${req.file.filename}` : null
     const category = await Category.create({ name, color, iconUrl })
     res.status(201).json(category)
   } catch (err) {
-    if (err.code === 11000) {
-      return res.status(400).json({ error: 'Category name already exists' })
-    }
-    res.status(500).json({ error: err.message })
+    next(err)
   }
 }
 
-const updateCategory = async (req, res) => {
+const updateCategory = async (req, res, next) => {
   try {
     const { name, color } = req.body
-
-    if (!name) return res.status(400).json({ error: 'Name is required' })
+    if (!name) throw new AppError('Name is required', 400)
 
     const category = await Category.findByIdAndUpdate(
       req.params.id,
       { name, color },
       { new: true, runValidators: true }
     )
-
-    if (!category) return res.status(404).json({ error: 'Category not found' })
+    if (!category) throw new AppError('Category not found', 404)
     res.json(category)
   } catch (err) {
-    if (err.code === 11000) {
-      return res.status(400).json({ error: 'Category name already exists' })
-    }
-    res.status(500).json({ error: err.message })
+    next(err)
   }
 }
 
-// dedicated endpoint to upload or replace just the icon
-const updateCategoryIcon = async (req, res) => {
+const updateCategoryIcon = async (req, res, next) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' })
-    }
+    if (!req.file) throw new AppError('No file uploaded', 400)
 
     const iconUrl = `/uploads/${req.file.filename}`
-
     const category = await Category.findByIdAndUpdate(
       req.params.id,
       { iconUrl },
       { new: true }
     )
-
-    if (!category) return res.status(404).json({ error: 'Category not found' })
+    if (!category) throw new AppError('Category not found', 404)
     res.json(category)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    next(err)
   }
 }
 
-const deleteCategory = async (req, res) => {
+const deleteCategory = async (req, res, next) => {
   try {
     const category = await Category.findByIdAndDelete(req.params.id)
-    if (!category) return res.status(404).json({ error: 'Category not found' })
+    if (!category) throw new AppError('Category not found', 404)
     res.status(204).end()
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    next(err)
   }
 }
 

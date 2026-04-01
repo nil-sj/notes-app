@@ -6,6 +6,7 @@ const path = require('path')
 require('dotenv').config()
 
 const { authLimiter, generalLimiter } = require('./middleware/rateLimiter')
+const errorHandler = require('./middleware/errorHandler')
 
 const app = express()
 
@@ -33,35 +34,20 @@ app.use(cors({
   credentials: true,
 }))
 
-// apply general limiter to all routes
 app.use(generalLimiter)
-
 app.use(express.json())
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')))
 
-// connect to MongoDB
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB connected'))
   .catch((err) => console.error('MongoDB connection error:', err))
 
-// apply strict limiter to auth routes only — overrides general limiter
 app.use('/api/auth',       authLimiter, require('./routes/authRoutes'))
 app.use('/api/notes',      require('./routes/noteRoutes'))
 app.use('/api/categories', require('./routes/categoryRoutes'))
 
-// error handler
-app.use((err, req, res, next) => {
-  if (err.message && err.message.includes('Images only')) {
-    return res.status(400).json({ error: err.message })
-  }
-  if (err.code === 'LIMIT_FILE_SIZE') {
-    return res.status(400).json({ error: 'File too large — maximum size is 1MB' })
-  }
-  if (err.message && err.message.includes('CORS policy')) {
-    return res.status(403).json({ error: err.message })
-  }
-  res.status(500).json({ error: err.message })
-})
+// must be last — after all routes
+app.use(errorHandler)
 
 const PORT = process.env.PORT || 5000
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`))

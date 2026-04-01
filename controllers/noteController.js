@@ -1,6 +1,7 @@
 const mongoose = require('mongoose')
 const Note = require('../models/Note')
 const Category = require('../models/Category')
+const AppError = require('../utils/AppError')
 
 const validateNoteInput = async ({ title, category }) => {
   if (!title) return 'Title is required'
@@ -19,14 +20,14 @@ const sanitiseTags = (tags) => {
   )]
 }
 
-const getNotes = async (req, res) => {
+const getNotes = async (req, res, next) => {
   try {
     const { category, tag, page, limit: limitParam } = req.query
     const filter = {}
 
     if (category) {
       if (!mongoose.Types.ObjectId.isValid(category)) {
-        return res.status(400).json({ error: 'Invalid category ID' })
+        throw new AppError('Invalid category ID', 400)
       }
       filter.category = category
     }
@@ -35,19 +36,12 @@ const getNotes = async (req, res) => {
       filter.tags = { $in: [tag.trim().toLowerCase()] }
     }
 
-    // visibility filter
     const authHeader = req.headers.authorization
     if (authHeader && authHeader.startsWith('Bearer ')) {
       try {
         const jwt = require('jsonwebtoken')
-        const decoded = jwt.verify(
-          authHeader.split(' ')[1],
-          process.env.JWT_SECRET
-        )
-        filter.$or = [
-          { status: 'public' },
-          { createdBy: decoded.id },
-        ]
+        const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET)
+        filter.$or = [{ status: 'public' }, { createdBy: decoded.id }]
       } catch {
         filter.status = 'public'
       }
@@ -55,12 +49,10 @@ const getNotes = async (req, res) => {
       filter.status = 'public'
     }
 
-    // pagination — parse and validate
-    const pageNum  = Math.max(1, parseInt(page)  || 1)
+    const pageNum  = Math.max(1, parseInt(page) || 1)
     const limitNum = Math.min(50, Math.max(1, parseInt(limitParam) || 10))
     const skip     = (pageNum - 1) * limitNum
 
-    // run both queries in parallel — faster than sequential awaits
     const [notes, total] = await Promise.all([
       Note.find(filter)
         .populate('category', 'name color iconUrl')
@@ -75,90 +67,81 @@ const getNotes = async (req, res) => {
       notes,
       pagination: {
         total,
-        page:       pageNum,
-        limit:      limitNum,
-        totalPages: Math.ceil(total / limitNum),
+        page:        pageNum,
+        limit:       limitNum,
+        totalPages:  Math.ceil(total / limitNum),
         hasNextPage: pageNum < Math.ceil(total / limitNum),
         hasPrevPage: pageNum > 1,
       },
     })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    next(err)
   }
 }
 
-const getNoteById = async (req, res) => {
+const getNoteById = async (req, res, next) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ error: 'Invalid note ID' })
+      throw new AppError('Invalid note ID', 400)
     }
     const note = await Note.findById(req.params.id)
       .populate('category', 'name color iconUrl')
       .populate('createdBy', 'name email')
-    if (!note) return res.status(404).json({ error: 'Note not found' })
+    if (!note) throw new AppError('Note not found', 404)
 
-    // private and pending notes only visible to their creator
     const authHeader = req.headers.authorization
     if (note.status !== 'public') {
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(403).json({ error: 'This note is private' })
+        throw new AppError('This note is private', 403)
       }
       try {
         const jwt = require('jsonwebtoken')
-        const decoded = jwt.verify(
-          authHeader.split(' ')[1],
-          process.env.JWT_SECRET
-        )
+        const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET)
         if (note.createdBy._id.toString() !== decoded.id.toString()) {
-          return res.status(403).json({ error: 'This note is private' })
+          throw new AppError('This note is private', 403)
         }
-      } catch {
-        return res.status(403).json({ error: 'This note is private' })
+      } catch (err) {
+        if (err.isOperational) throw err
+        throw new AppError('This note is private', 403)
       }
     }
 
     res.json(note)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    next(err)
   }
 }
 
-const createNote = async (req, res) => {
+const createNote = async (req, res, next) => {
   try {
     const { title, content, category, tags } = req.body
 
     const error = await validateNoteInput({ title, category })
-    if (error) return res.status(400).json({ error })
+    if (error) throw new AppError(error, 400)
 
     const imageUrl = req.file ? `/uploads/${req.file.filename}` : null
 
     const note = await Note.create({
-      title,
-      content,
-      category,
+      title, content, category,
       tags: sanitiseTags(tags),
       imageUrl,
       createdBy: req.user.id,
-      status: 'private',         // always starts private
+      status: 'private',
     })
     await note.populate('category', 'name color iconUrl')
     await note.populate('createdBy', 'name email')
     res.status(201).json(note)
   } catch (err) {
-    if (err.name === 'ValidationError') {
-      const messages = Object.values(err.errors).map(e => e.message)
-      return res.status(400).json({ error: messages.join(', ') })
-    }
-    res.status(500).json({ error: err.message })
+    next(err)
   }
 }
 
-const updateNote = async (req, res) => {
+const updateNote = async (req, res, next) => {
   try {
     const { title, content, category, tags } = req.body
 
     const error = await validateNoteInput({ title, category })
-    if (error) return res.status(400).json({ error })
+    if (error) throw new AppError(error, 400)
 
     const note = await Note.findByIdAndUpdate(
       req.params.id,
@@ -170,19 +153,14 @@ const updateNote = async (req, res) => {
 
     res.json(note)
   } catch (err) {
-    if (err.name === 'ValidationError') {
-      const messages = Object.values(err.errors).map(e => e.message)
-      return res.status(400).json({ error: messages.join(', ') })
-    }
-    res.status(500).json({ error: err.message })
+    next(err)
   }
 }
 
-const updateNoteImage = async (req, res) => {
+const updateNoteImage = async (req, res, next) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' })
-    }
+    if (!req.file) throw new AppError('No file uploaded', 400)
+
     const imageUrl = `/uploads/${req.file.filename}`
     const note = await Note.findByIdAndUpdate(
       req.params.id,
@@ -193,68 +171,61 @@ const updateNoteImage = async (req, res) => {
       .populate('createdBy', 'name email')
     res.json(note)
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    next(err)
   }
 }
 
-// creator requests to publish their note
-const publishNote = async (req, res) => {
+const publishNote = async (req, res, next) => {
   try {
-    // req.note is already fetched by requireOwnership
     const note = req.note
-
     if (note.status === 'public') {
-      return res.status(400).json({ error: 'Note is already public' })
+      throw new AppError('Note is already public', 400)
     }
-
     note.status = 'pending'
     await note.save()
-
     res.json({ message: 'Note submitted for admin approval', note })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    next(err)
   }
 }
 
-// admin approves or rejects a pending note
-const approveNote = async (req, res) => {
+const approveNote = async (req, res, next) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ error: 'Invalid note ID' })
+      throw new AppError('Invalid note ID', 400)
     }
 
-    const { action } = req.body  // action: 'approve' or 'reject'
-
+    const { action } = req.body
     if (!['approve', 'reject'].includes(action)) {
-      return res.status(400).json({ error: 'Action must be approve or reject' })
+      throw new AppError('Action must be approve or reject', 400)
     }
 
     const note = await Note.findById(req.params.id)
-    if (!note) return res.status(404).json({ error: 'Note not found' })
-
+    if (!note) throw new AppError('Note not found', 404)
     if (note.status !== 'pending') {
-      return res.status(400).json({ error: 'Only pending notes can be reviewed' })
+      throw new AppError('Only pending notes can be reviewed', 400)
     }
 
     note.status = action === 'approve' ? 'public' : 'private'
     await note.save()
 
-    const message = action === 'approve'
-      ? 'Note approved and is now public'
-      : 'Note rejected and returned to private'
-
-    res.json({ message, note })
+    res.json({
+      message: action === 'approve'
+        ? 'Note approved and is now public'
+        : 'Note rejected and returned to private',
+      note,
+    })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    next(err)
   }
 }
 
-const deleteNote = async (req, res) => {
+const deleteNote = async (req, res, next) => {
   try {
     await Note.findByIdAndDelete(req.params.id)
     res.status(204).end()
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    next(err)
   }
 }
 
