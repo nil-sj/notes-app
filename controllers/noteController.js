@@ -276,6 +276,40 @@ const approveNote = async (req, res, next) => {
   }
 }
 
+const getPendingNotes = async (req, res, next) => {
+  try {
+    const { page, limit: limitParam } = req.query
+
+    const pageNum  = Math.max(1, parseInt(page) || 1)
+    const limitNum = Math.min(50, Math.max(1, parseInt(limitParam) || 10))
+    const skip     = (pageNum - 1) * limitNum
+
+    const [notes, total] = await Promise.all([
+      Note.find({ status: 'pending' })
+        .populate('category', 'name color iconUrl')
+        .populate('createdBy', 'name email')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum),
+      Note.countDocuments({ status: 'pending' }),
+    ])
+
+    res.json({
+      notes,
+      pagination: {
+        total,
+        page:        pageNum,
+        limit:       limitNum,
+        totalPages:  Math.ceil(total / limitNum),
+        hasNextPage: pageNum < Math.ceil(total / limitNum),
+        hasPrevPage: pageNum > 1,
+      },
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
 const deleteNote = async (req, res, next) => {
   try {
     await Note.findByIdAndDelete(req.params.id)
@@ -294,5 +328,6 @@ module.exports = {
   updateNoteImage,
   publishNote,
   approveNote,
+  getPendingNotes,
   deleteNote,
 }

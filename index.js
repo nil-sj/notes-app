@@ -45,6 +45,7 @@ mongoose.connect(process.env.MONGO_URI)
 app.use('/api/auth',       authLimiter, require('./routes/authRoutes'))
 app.use('/api/notes',      require('./routes/noteRoutes'))
 app.use('/api/categories', require('./routes/categoryRoutes'))
+app.use('/api/admin',      require('./routes/adminRoutes'))
 
 // must be last — after all routes
 app.use(errorHandler)
